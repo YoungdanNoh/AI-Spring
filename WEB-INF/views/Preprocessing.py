@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*- 
 import MeCab, csv, os
 import glob, pandas as pd, numpy as np
+from sqlalchemy import create_engine
+import pymysql
 m = MeCab.Tagger('-d /usr/local/lib/mecab/dic/mecab-ko-dic')
 #os.chdir("/Users/noyeongdan/data")
 
@@ -13,7 +15,7 @@ category_, date_, content_ = [], [], []
         file_to_ids(f_name)'''
 
 
-def file_to_ids(fname):
+def file_to_ids():
     #name = fname.split(".csv")[0]
     #name_array = name.split('/')
     #f_name = name_array[3] #파일이름
@@ -21,15 +23,24 @@ def file_to_ids(fname):
     #tags for tokenizer
     tag_classes = ['NNG', 'NNP','VA', 'VV+EC', 'XSV+EP', 'XSV+EF', 'XSV+EC', 'VV+ETM', 'MAG', 'MAJ', 'NP', 'NNBC', 'IC', 'XR', 'VA+EC']
     #데이터 읽어오고.
-    data = pd.read_csv(fname+'.csv')
+    engine = create_engine('mysql+pymysql://DAN:dudeks7052@localhost/AI',convert_unicode=True)
+    conn = engine.connect()
+    data = pd.read_sql_table('uploadfile', conn)
+    #data = pd.read_csv('uploadFile.csv')
+    
     #각각 분류
-    title = data.iloc[:,3].values
-    date = data.iloc[:, 0].values
-    content = data.iloc[:, 4].values
-
+    title = data.iloc[:,1].values
+    #date = data.iloc[:, 0].values
+    content = data.iloc[:, 2].values
+    category = data.iloc[:,0].values
+    
     for cnt, value in enumerate(title):
         result = ''
-        value = m.parseToNode(str(title[cnt]).strip() + str(content[cnt]).strip())
+#         print(str(title[cnt].encode('utf8')).strip())
+#         print(str(content[cnt]).strip())
+        
+        #파이썬은 기본적으로 unicode를 사용한다. 따라서 한글을 사용하려면 unicode를 utf-8로 바꿔주어야 사용 가능하다.
+        value = m.parseToNode(str(title[cnt].encode('utf8')).strip() + str(content[cnt].encode('utf8')).strip())
         while value:
             tag = value.feature.split(",")[0]
             word = value.feature.split(",")[3]
@@ -38,58 +49,103 @@ def file_to_ids(fname):
                 result += word.strip()+" "
             value = value.next
         content_.append(result)
-        date_.append(date[cnt])
+        #date_.append(date[cnt])
         #category
-        if '경제' in fname : category_.append("0")
-        if '사회' in fname : category_.append("1")
-        if '생활문화' in fname : category_.append("2")
-        if '세계' in fname : category_.append("3")
-        if '정치' in fname : category_.append("4")
-        if 'IT과학' in fname : category_.append("5")
+        if category[cnt].encode('utf8')=='경제' : category_.append("0")
+        if category[cnt].encode('utf8')=='사회' : category_.append("1")
+        if category[cnt].encode('utf8')=='생활문화' : category_.append("2")
+        if category[cnt].encode('utf8')=='세계' : category_.append("3")
+        if category[cnt].encode('utf8')=='정치' : category_.append("4")
+        if category[cnt].encode('utf8')=='IT과학' : category_.append("5")
+#         if '경제' in fname : category_.append("0")
+#         if '사회' in fname : category_.append("1")
+#         if '생활문화' in fname : category_.append("2")
+#         if '세계' in fname : category_.append("3")
+#         if '정치' in fname : category_.append("4")
+#         if 'IT과학' in fname : category_.append("5")
 
-def save(month, file_path, f_name):
-    if not os.path.exists(file_path):
-        os.mkdir(file_path)
-    with open(file_path+"/"+f_name+'_after_prepro.csv', 'a') as f:
-        writer = csv.writer(f)
+def save():
+    conn = pymysql.connect(host='127.0.0.1', user='DAN', password='dudeks7052', db='AI', charset='utf8')
+    curs = conn.cursor()
+    conn.commit()
     
-        for cnt, i in enumerate(content_):
-            if f_name=='Article_경제' and category_[cnt]=='0':
-                date__ = date_[cnt]
-                content__ = content_[cnt]
-                category__ = category_[cnt]
-                writer.writerow((date__, content__, category__))
-            elif f_name=='Article_사회' and category_[cnt]=='1':
-                date__ = date_[cnt]
-                content__ = content_[cnt]
-                category__ = category_[cnt]
-                writer.writerow((date__, content__, category__))
-            elif f_name=='Article_생활문화' and category_[cnt]=='2':
-                date__ = date_[cnt]
-                content__ = content_[cnt]
-                category__ = category_[cnt]
-                writer.writerow((date__, content__, category__))
-            elif f_name=='Article_세계' and category_[cnt]=='3':
-                date__ = date_[cnt]
-                content__ = content_[cnt]
-                category__ = category_[cnt]
-                writer.writerow((date__, content__, category__))
-            elif f_name=='Article_정치' and category_[cnt]=='4':
-                date__ = date_[cnt]
-                content__ = content_[cnt]
-                category__ = category_[cnt]
-                writer.writerow((date__, content__, category__))
-            elif f_name=='Article_IT과학' and category_[cnt]=='5':
-                date__ = date_[cnt]
-                content__ = content_[cnt]
-                category__ = category_[cnt]
-                writer.writerow((date__, content__, category__))
+#     data = pd.read_csv('./after_preprocessing_data/after_prepro.csv')
+    f = open('./after_preprocessing_data/after_prepro.csv','r')
+    csvReader = csv.reader(f)
+    
+    sql = """delete from after_prepro"""
+    curs.execute(sql)
+#      
+    for cnt, i in enumerate(content_):
+        content__ = content_[cnt]
+        category__ = category_[cnt]
+        
+        sql = """insert into after_prepro (Content,Category) values (%s,%s)"""
+        curs.execute(sql, (content__,category__))
+    
+    #db의 변화 저장
+    conn.commit()
+    f.close()
+    conn.close()
+    
+    
+#     if not os.path.exists(file_path):
+#         os.mkdir(file_path)
+#     with open(file_path+"/"+'after_prepro.csv', 'w') as f:
+#         writer = csv.writer(f)
+#     
+#         
+#         for cnt, i in enumerate(content_):
+#             if cnt==0:
+#                 date__ = "Date"
+#                 content__ = "Content"
+#                 category__ = "Category"
+#             else:
+#                 date__ = date_[cnt]
+#                 content__ = content_[cnt]
+#                 category__ = category_[cnt]
+#             writer.writerow((date__, content__, category__))
+            
+            
+            
+            
+#             if f_name=='Article_경제' and category_[cnt]=='0':
+#                 date__ = date_[cnt]
+#                 content__ = content_[cnt]
+#                 category__ = category_[cnt]
+#                 writer.writerow((date__, content__, category__))
+#             elif f_name=='Article_사회' and category_[cnt]=='1':
+#                 date__ = date_[cnt]
+#                 content__ = content_[cnt]
+#                 category__ = category_[cnt]
+#                 writer.writerow((date__, content__, category__))
+#             elif f_name=='Article_생활문화' and category_[cnt]=='2':
+#                 date__ = date_[cnt]
+#                 content__ = content_[cnt]
+#                 category__ = category_[cnt]
+#                 writer.writerow((date__, content__, category__))
+#             elif f_name=='Article_세계' and category_[cnt]=='3':
+#                 date__ = date_[cnt]
+#                 content__ = content_[cnt]
+#                 category__ = category_[cnt]
+#                 writer.writerow((date__, content__, category__))
+#             elif f_name=='Article_정치' and category_[cnt]=='4':
+#                 date__ = date_[cnt]
+#                 content__ = content_[cnt]
+#                 category__ = category_[cnt]
+#                 writer.writerow((date__, content__, category__))
+#             elif f_name=='Article_IT과학' and category_[cnt]=='5':
+#                 date__ = date_[cnt]
+#                 content__ = content_[cnt]
+#                 category__ = category_[cnt]
+#                 writer.writerow((date__, content__, category__))
          #for cnt, i in enumerate(content_):
          #   print(category_[cnt])
          #   if category_[cnt]==0:
          #       print('int')
          #   elif category_[cnt]=='0':
          #       print('string')
+
 
 
 def combine():
